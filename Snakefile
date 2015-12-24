@@ -1,0 +1,299 @@
+##command snakemake get_msa --config ifile=./contigs.fasta ofile=./msa
+#rule get_msa:
+#    input:
+#        config["ifile"]
+#    output:
+#        config["ofile"]
+#    shell:
+#        """
+#        mafft --auto {input} > {output}
+#        """
+#
+##command snakemake run_python_dp --config ifile=./msa ofile=./
+#rule run_python_dp:
+#    input:
+#        config["ifile"]
+#    shell:
+#        """
+#        ~/bin/pypy/pypy/bin/pypy DP.py {input}
+#        """
+#
+##command snakemake run_cpp_dp --config ifile=./msa ofile=./
+#rule run_cpp_dp:
+#    input:
+#        config["ifile"]
+#    shell:
+#        """
+#        clang++ --std=c++11 -O3 ./src/DP.cpp -o ./src/dp
+#        ./src/dp {input}
+#        """
+#
+#command snakemake generate_cluster --config ifile=quant_human.clust ofile=Trinity.fasta
+#rule generate_cluster:
+#    input:
+#        ifile = config["ifile"],
+#        ref = config["ofile"]
+#    output:
+#        "clusters"
+#    run:
+#        from pyfasta import Fasta
+#
+#        refFileH = Fasta(input.ref)
+#        
+#        idDict = {}
+#        for oId in refFileH.keys():
+#            nId = oId.strip().split(' ')[0]
+#            idDict[nId] = oId
+#        
+#        ifileH = open(input.ifile, 'r')
+#        shell("mkdir -p clusters")
+#        clId = 0
+#        for line in ifileH:
+#            contigsList = line.strip().split('\t')
+#            clId += 1
+#            with open("./clusters/"+str(clId)+'.fa', 'w') as oFile:
+#                for contig in contigsList:
+#                    if contig in idDict.keys():
+#                        oFile.write(">" + contig + '\n')
+#                        oFile.write(str(refFileH[idDict[contig]]) + '\n')
+#                    else:
+#                        print (contig)
+
+
+rule makeBlastdb:
+    input:
+        ref = "Human-Trinity/contigs.fasta",
+        contig2cuffGene = "Human-Trinity/contig2cuffGene.txt",
+        cuffGene2refSeq = "Human-Trinity/cuffGene2refSeq.txt",
+        refSeq2gene = "Human-Trinity/refSeq2gene.txt",
+        transcriptome = "Human-Trinity/Human_Genome.transcripts.fa",
+        transcript2gene = "Human-Trinity/transc2gene.txt",
+        cluster = "clusters/1.fa"
+    output:
+        db = "blastdatabase/"
+    run:
+        shell("mkdir -p {output}")
+
+        from pyfasta import Fasta
+        import pandas as pd
+        import collections
+
+        #get Refseq to gene mapping
+        #shell("mysql --user=genome -N --host=genome-mysql.cse.ucsc.edu -A -D hg19 -e 'select name,name2 from refGene' > refseq.txt")
+        
+        contigGeneMap = {}
+        
+        with open(input.contig2cuffGene, 'r') as f:
+            data = pd.read_table(f, header=None, names=['contig', 'cuffgene'])
+            table = data.set_index("contig").to_dict()['cuffgene']
+
+        with open(input.cuffGene2refSeq, 'r') as f:
+            data = pd.read_table(f, header=None, names=["cuffgene", "refseq"])
+            data = data.set_index("cuffgene").to_dict()['refseq']
+            for k,v in table.items():
+                table[k] = data[table[k]]
+        
+        ccount = 0
+        with open(input.refSeq2gene, 'r') as f:
+            data = pd.read_table(f, header=None, names=["refseq", "gene"])
+            data = data.set_index("refseq").to_dict()['gene']
+            for k,v in table.items():
+                try:
+                    table[k] = data[table[k]]
+                except:
+                    ccount +=1
+        print (ccount)
+
+        refFileH = Fasta(input.cluster)
+        count = 0
+
+        geneList = collections.defaultdict(int)
+        for line in refFileH:
+            contigId = line.strip().split(' ')[0].strip()
+#            print (contigId)
+            if contigId in table:
+                geneList[table[contigId]] += 1
+            else:
+                count += 1
+        
+
+        print ("Ambiguous Contigs {}".format(count))
+        maxfreqGene = str(max(geneList, key=geneList.get))
+
+        with open(input.transcript2gene, 'r') as f:
+            data = pd.read_table(f, header=1, names = ['transcript', 'gene'])
+            data =  {k: list(v) for k,v in data.groupby("gene")["transcript"]}
+        #print (maxfreqGene)
+        f = Fasta(input.transcriptome)
+        with open(output.db +"outFile", 'w') as wFile:
+            for transcript in data[maxfreqGene]:
+                wFile.write('>')
+                wFile.write(str(transcript))
+                wFile.write("\n"+str(f[transcript])+"\n")
+
+
+        shell("makeblastdb -in {output.db}outFile -dbtype nucl -out {output.db}db")
+
+rule makeBlastdb_allGene:
+    input:
+        transcript2gene = "Human-Trinity/transc2gene.txt",
+        transcriptome = "Human-Trinity/Human_Genome.transcripts.fa"
+
+    run:
+        import pandas as pd
+        from pyfasta import Fasta
+
+        with open(input.transcript2gene, 'r') as f:
+            data = pd.read_table(f, header = 1, names = ['transcript', 'gene'])
+            data =  {k: list(v) for k,v in data.groupby("gene")["transcript"]}
+        genesSet = set(data.keys())
+        
+        f = Fasta(input.transcriptome)
+        shell("mkdir -p geneBlastDatabase")
+        count = 0
+        for gene in genesSet:
+            flag = 0
+            name = 'geneBlastDatabase/'+gene.replace('/', '-')+'.fq'
+            with open(name, 'w') as wFile:
+                for transcript in data[gene]:
+                    if transcript in f:
+                        flag = 1
+                        wFile.write('>')
+                        wFile.write(str(transcript))
+                        wFile.write("\n"+str(f[transcript])+"\n")
+                    else:
+                        count += 1
+                        continue
+            if flag == 0:
+                shell("rm {name}")
+            else:
+                shell("makeblastdb -in {name} -dbtype nucl -out {name}.db")
+
+rule run_blast:
+    input:
+        db = "blastdatabase/",
+        query = "clusters/1.fa",
+        msa = "./msa"
+    output:
+        "output/"
+    run:
+        import pandas as pd
+        from pyfasta import Fasta
+        import collections
+    #    mkdir -p {output}
+    #    clang++ --std=c++11 -O3 ./src/DP.cpp -o ./src/dp
+    #    ./src/dp {input.msa} > dp.txt
+        with open("dp.txt", 'r') as f:
+            clusterPos = pd.read_table(f, header=0, names = ['start', 'end'])
+        
+        f = Fasta(input.msa)
+        length = len(f[list(f.keys())[0]])
+        ntCount = [{'a':0, 't':0, 'c':0, 'g':0, '-':0} for x in range(length)]
+
+        for baseIndex in range(length):
+            for contig in f:
+                ntCount[baseIndex][f[contig][baseIndex]] += 1
+
+        clusterPos = clusterPos.to_dict()
+        
+        #clear '-' count
+        for i in ntCount:
+            i['-'] = 0
+
+        with open('consensus.fa', 'w') as f:
+            for i in range(len(clusterPos['start'].keys())-1, -1, -1):
+                f.write('>'+str(i+1)+'\n')
+                for j in range(clusterPos['start'][i], clusterPos['end'][i]+1, 1):
+                    f.write(max(ntCount[j], key=ntCount[j].get))
+                f.write('\n')
+             
+            f.write('>'+str(0)+'\n')
+            for i in range(clusterPos['end'][0]+1, length, 1):
+                f.write(max(ntCount[i], key=ntCount[i].get))
+            f.write('\n')
+
+   
+
+        shell("/usr/bin/time /usr/bin/blastn -db {input.db}db -query consensus.fa -outfmt 6 -out {output}all-vs-all1.tsv -num_threads 20")
+
+rule run_blast_allGenes:
+    input:
+        db = "geneBlastDatabase/"
+    run:
+        import glob
+        count = 0
+        shell("mkdir -p outputAll")
+        for database in glob.glob(input.db+"*.fq"):
+            geneName = database.split('/')[-1][:-3]
+            database = database + ".db"
+            shell("/usr/bin/blastn -db {database} -query consensus.fa -outfmt 6 -out outputAll/{geneName}.tsv -num_threads 20")
+            #shell("/usr/bin/blastn -db {database} -query consensus.fa -outfmt '7 qacc sacc evalue' -out outputAll/{geneName}.tsv -num_threads 20")
+            count += 1
+            print("\rDone with {}".format(count))
+
+rule get_similarity:
+    input:
+        tsv = "output/all-vs-all1.tsv"
+    run:
+        from munkres import Munkres
+        import pandas as pd
+        import numpy as np
+
+        with open(input.tsv, 'r') as f:
+            data = pd.read_table(f, header=None, names=["clusterId", "tId", 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'eval', 'i'])
+            data = data.ix[:, ['clusterId', 'tId', 'eval']]
+
+        transcripts = sorted(list(set(data['tId'])))
+        clusters = sorted(list(set(data['clusterId'])))
+
+        valDict = data.to_dict('index')
+        
+        matrix = np.ones((len(clusters), len(transcripts))) * 1000
+        for _,v in valDict.items():
+            old = matrix[clusters.index(v['clusterId'])][transcripts.index(v['tId'])]
+            if old > v['eval']:
+                matrix[clusters.index(v['clusterId'])][transcripts.index(v['tId'])] = v['eval']
+
+        m = Munkres()
+        indexes = m.compute(matrix)
+        for row, column in indexes:
+            value = matrix[row][column]
+            print ('({}, {}) -> {}'.format(clusters[row], transcripts[column], value))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
