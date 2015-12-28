@@ -18,16 +18,16 @@
 #        ~/bin/pypy/pypy/bin/pypy DP.py {input}
 #        """
 #
-##command snakemake run_cpp_dp --config ifile=./msa ofile=./
-#rule run_cpp_dp:
-#    input:
-#        config["ifile"]
-#    shell:
-#        """
-#        clang++ --std=c++11 -O3 ./src/DP.cpp -o ./src/dp
-#        ./src/dp {input}
-#        """
-#
+#command snakemake run_cpp_dp --config ifile=./msa ofile=./
+rule run_cpp_dp:
+    input:
+        config["ifile"]
+    shell:
+        """
+        clang++ --std=c++11 -O3 ./src/DP.cpp -o ./src/dp
+        ./src/dp {input}
+        """
+
 #command snakemake generate_cluster --config ifile=quant_human.clust ofile=Trinity.fasta
 #rule generate_cluster:
 #    input:
@@ -259,6 +259,15 @@ rule get_similarity:
         for row, column in indexes:
             value = matrix[row][column]
             print ('({}, {}) -> {}'.format(clusters[row], transcripts[column], value))
+
+#rule get_similarity_all:
+#    run:
+#        import glob
+#
+#        for database in glob.glob("outputAll/*.tsv")
+#            
+#
+
 
 
 
