@@ -21,8 +21,10 @@ matrix<uint32_t> getDistacneMatrix(std::vector<std::vector<uint32_t>> eqClass){
     //calculates the distance matrix out of eqClass
 
     matrix<uint32_t> disMatrix(dimension, dimension);
+    matrix<uint32_t> sumMatrix(dimension, dimension);
     //assign zeros to all element
     disMatrix = zero_matrix<uint32_t>(dimension, dimension) ;
+    sumMatrix = zero_matrix<uint32_t>(dimension, dimension) ;
     //calculates distance Mtrix
     for (int32_t i : boost::irange(0,  static_cast<int32_t>(dimension))){
         for (int32_t j : boost::irange(i+1, static_cast<int32_t>(dimension))){
@@ -36,15 +38,15 @@ matrix<uint32_t> getDistacneMatrix(std::vector<std::vector<uint32_t>> eqClass){
     for (int32_t i : boost::irange(0,  static_cast<int32_t>(dimension))){
         for (int32_t j : boost::irange(i+1, static_cast<int32_t>(dimension))){
             if (disMatrix(i, j) != disMatrix(i, j-1))
-                disMatrix(i, j) += disMatrix(i, j-1);
+                sumMatrix(i, j) = disMatrix(i, j) + sumMatrix(i, j-1);
             else
-                disMatrix(i, j) = disMatrix(i, j-1);
+                sumMatrix(i, j) = sumMatrix(i, j-1);
         }
     }
 
     std::cerr<<"Done Creating Distance Matrix"<<std::endl;
-    std::cout<<disMatrix;
-    return disMatrix;
+    //std::cout<<sumMatrix;
+    return sumMatrix;
 }
 
 void get_opt(std::vector<std::vector<uint32_t>> eqClass){
