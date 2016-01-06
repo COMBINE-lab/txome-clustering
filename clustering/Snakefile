@@ -1,0 +1,11 @@
+rule run:
+    input:
+        "./RABL2B.gene"
+    output:
+        "graph.pdf"
+    shell:
+        """
+        ../binary/gatb-core-1.1.0-Linux/bin/dbgh5 -abundance-min 1 -in {input} -out ./graph.h5 -kmer-size 31
+        ../GATB/build/tools/GATB_1 -graph ./graph.h5 -out ./graph.dot
+        dot -Tpdf ./graph.dot -o ./graph.pdf
+        """
