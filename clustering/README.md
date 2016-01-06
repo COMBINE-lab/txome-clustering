@@ -4,3 +4,5 @@
 ```
 snakemake run
 ```
+
+Source inside tools/clustering1/main.cpp
