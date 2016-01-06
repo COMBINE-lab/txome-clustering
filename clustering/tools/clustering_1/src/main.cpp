@@ -40,58 +40,72 @@ public:
             NodeType current = itMap.item();
             size_t indegree = graph.indegree(current);
             size_t outdegree = graph.outdegree(current);
-            if (indegree == 0 or outdegree == 0){
+            if (indegree == 0){
                 start = current;
                 break;
             }
         }
 
-        std::vector<Node> stack;
-        std::vector<Node> visited;
-        stack.push_back(start);
+        map<Node, u_int64_t> abundance;
+        for (itMap.first(); !itMap.isDone(); itMap.next())  {
+            NodeType current = itMap.item();
+            abundance[current] = current.abundance;
+        }
+        //std::cout<< graph.queryAbundance(start)<<"<<";
 
+        std::vector<Node> stack;
+        stack.push_back(start);
         while(!stack.empty()){
             Node temp;
             temp = stack.back();
             stack.pop_back();
 
-            if (find(visited.begin(), visited.end(), temp) != visited.end()){
-                continue;
-            }
-
-            visited.push_back(temp);
-
             Graph::Vector<NodeType> successors = graph.successors<NodeType>(temp);
             mapping[temp.kmer] = count;
+            //std::cout<<successors.size()<<graph.toString(successors[0]);
             if (successors.size() == 1){
-                stack.push_back(successors[0]);
-                std::cout<<"inside"<<endl;
-                if (graph.successors<NodeType>(successors[0]).size() != 1){
+                //using mapping as visited
+
+                if (mapping.find(successors[0]) != mapping.end()){
                     count++;
-                    std::cout<<"avi"<<endl;
+                    continue;
+                }
+
+                stack.push_back(successors[0]);
+                //check for  --O--
+                if (graph.successors<NodeType>(successors[0]).size() != 1 or graph.predecessors<NodeType>(successors[0]).size() != 1 ){
+                    count++;
                 }
             }
             else{
                 for (size_t i=0; i<successors.size(); i++){
-                    stack.push_back(successors[i]);
+                    if (mapping.find(successors[i]) == mapping.end()){
+                        stack.push_back(successors[i]);
+                    }
                 }
                 count++;
-                std::cout<<"outside"<<endl;
             }
         }
 
-        Graph::Iterator<NodeType> it = graph.iterator<NodeType> ();
-        for (it.first(); !it.isDone(); it.next())
-        {
-            NodeType current = it.item();
-            Graph::Vector<NodeType> neighbors = graph.neighbors<NodeType> (current.kmer);
-            for (size_t i=0; i<neighbors.size(); i++)
-            {
-                //for (size_t j=0; j<current.abundance; j++){
-                if (mapping[current.kmer]  != mapping[neighbors[i].kmer]){
-                    output << mapping[current.kmer] << " -> " <<  mapping[neighbors[i].kmer] << " ;\n";
+        std::vector<Node> visited;
+        stack.push_back(start);
+        visited.push_back(start);
+        while(!stack.empty()){
+            Node temp;
+            temp = stack.back();
+            stack.pop_back();
+            visited.push_back(temp);
+
+            Graph::Vector<NodeType> successors = graph.successors<NodeType>(temp);
+            for (size_t i=0; i<successors.size(); i++){
+                if (mapping[temp.kmer]  != mapping[successors[i].kmer]){
+                    for (size_t j=0; j<min(abundance[successors[i]], abundance[temp]); j++){
+                        output <<  mapping[temp.kmer]  << " -> " << mapping[successors[i].kmer]<< " ;\n";
+                    }
                 }
-                //}
+                if (find(visited.begin(), visited.end(), successors[i]) == visited.end()){
+                    stack.push_back(successors[i]);
+                }
             }
         }
         output << "}\n";
