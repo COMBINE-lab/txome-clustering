@@ -14,7 +14,6 @@ rule run:
         fwd = {k: list(v) for k,v in data.groupby("from")["id"]}
         kmer = data.set_index('2')['id'].to_dict()
         
-        print (kmer['ACTTTCAGGGCCTGCTGAGGAATCTGCAGGC'])
 
         count = 0
         start = 0
@@ -27,8 +26,6 @@ rule run:
             except KeyError:
                 mapping[node] = count
                 count += 1
-                #print (count)
-                #print ("<<>>")
                 continue
 
             mapping[node] = count
@@ -42,34 +39,15 @@ rule run:
                         count += 1
                 except KeyError:
                     count += 1
-                    #print (count)
-                    #print ("??")
                     continue
             else:
                 for s in succ:
                     if s not in mapping:
                         stack.append(s)
                 count += 1
-        #visited = []
-        #stack = fwd[-1]
+        print (mapping[kmer['GACTTTCAGGGCCTGCTGAGGAATCTGCAGG']])
         with open('graph.dot', 'w') as file:
             file.write("digraph all {\n")
-            #while (stack):
-            #    node = stack.pop()
-            #    visited.append(node)
-            #    try:
-            #        succ = fwd[node]
-            #    except KeyError:
-            #        #print (count)
-            #        #print ("{}")
-            #        continue
-
-            #    for s in succ:
-            #        if (mapping[node] != mapping[s]):
-            #            file.write(str(mapping[node]) + " -> " + str(mapping[s]) + " ;\n")
-            #        if (s not in visited):
-            #            stack.append(s)
-        
             from pyfasta import Fasta
             ref = Fasta(input.fa)
             color = ['red', 'green', 'blue', 'yellow']
@@ -87,7 +65,7 @@ rule run:
 
 rule run_orig:
     input:
-        "3.fa"
+        "QPRT.gene"
     output:
         "graph.pdf"
     run:
@@ -106,7 +84,40 @@ rule run_orig:
                     next = 0
                 file.write(str(prev) + " -> " + str(next) + " ;\n")
             file.write("}\n")
+        shell("dot -Tpdf ./graph.dot -o ./graph.pdf")
 
+rule run_orig_color:
+    input:
+        fa = "QPRT.gene"
+    output:
+        "graph.pdf"
+    run:
+        shell("./FastaToDeBruijn --fasta {input} -K 31 -C 1 --SS > graph.txt")
+        import pandas as pd
+        data = pd.read_table('graph.txt', header=0, names=['id', 'from', '1', '2', '3'])
+        
+        rev = {k: list(v) for k,v in data.groupby("id")["from"]}
+        fwd = {k: list(v) for k,v in data.groupby("from")["id"]}
+        kmer = data.set_index('2')['id'].to_dict()
+        
+        with open('graph.dot', 'w') as file:
+            file.write("digraph all {\n")
+            
+            from pyfasta import Fasta
+            ref = Fasta(input.fa)
+            color = ['red', 'green', 'blue', 'yellow']
+            col = 0
+            for id in ref.keys():
+                print (id)
+                seq = ref[id]
+                for ind in range(len(seq)-31):
+                    ckmer = seq[ind:ind+31]
+                    nkmer = seq[ind+1:ind+32]
+                    if (str(kmer[ckmer]) != str(kmer[nkmer]) ):
+                        file.write(str(kmer[ckmer]) + " -> " + str(kmer[nkmer])  + "[color=" + color[col]  +",penwidth=3.0] ;\n")
+                col += 1
+
+            file.write("}\n")
 rule run:
     input:
         "./RABL2B.gene"
